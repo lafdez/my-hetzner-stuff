@@ -1,0 +1,7 @@
+- name: Installing a single node Kubernetes cluster using k0s
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Downloading the k0s installer script
+      ansible.builtin.shell: "curl --proto '=https' --tlsv1.2 -sSf https://get.k0s.sh | sh"
+      register: k0s_download
