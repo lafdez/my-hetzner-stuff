@@ -1,7 +1,66 @@
-- name: Installing a single node Kubernetes cluster using k0s
+- name: Install some needed packages
+  vars_files:
+    - variables.yaml
   hosts: all
   gather_facts: true
   tasks:
+    - name: Update apk cache
+      community.general.apk:
+        update_cache: yes
+      ignore_errors: true
+      register: cache_update
+    - name: Install zsh, git, ...
+      ansible.builtin.package:
+        name:
+          "{{ item }}"
+        state: present
+        use: apk
+      loop: "{{ packages }}"
+      register: packages_installed
+      when: cache_update.changed
+    - name: Gather packages installed
+      ansible.builtin.package_facts:
+        manager: "apk"
+
+- name: Installing a single node Kubernetes cluster using k0s
+  vars_files:
+    - variables.yaml
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Check if /usr/local/bin/k0s already exists
+      ansible.builtin.stat:
+        path: /usr/local/bin/k0s
+      register: k0s_file
+    - name: Check if /etc/init.d/k0scontroller already exists
+      ansible.builtin.stat:
+        path: /etc/init.d/k0scontroller
+      register: k0s_service_file
     - name: Downloading the k0s installer script
       ansible.builtin.shell: "curl --proto '=https' --tlsv1.2 -sSf https://get.k0s.sh | sh"
       register: k0s_download
+      when: "'curl' in ansible_facts.packages and not k0s_file.stat.exists"
+    - name: Install k0s as service
+      ansible.builtin.shell: "k0s install controller --enable-worker --no-taints"
+      when: not k0s_service_file.stat.exists
+    - name: Start k0scontroller service
+      ansible.builtin.service:
+        name: k0scontroller
+        state: started
+    - name: Get the admin kubeconfig file
+      ansible.builtin.shell: "k0s kubeconfig admin > admin.kubeconfig"
+      register: admin_kubeconfig
+      when: k0s_file.stat.exists
+    - name: Write kubeconfig locally
+      ansible.builtin.fetch:
+        src: "admin.kubeconfig"
+        dest: "{{ kubeconfig }}"
+        flat: yes
+      when: admin_kubeconfig is defined
+    - name: Remove remote kubeconfig file
+      ansible.builtin.file:
+        path: "admin.kubeconfig"
+        state: absent
+        force: yes
+      register: remove_remote_kubeconfig
+      when: admin_kubeconfig is defined
