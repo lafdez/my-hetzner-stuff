@@ -45,4 +45,5 @@ terraform.rc
 
 *.out
 .*.hcl
-
+inventory.yaml
+variables.yaml
